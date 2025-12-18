@@ -34,7 +34,8 @@
     "scripts/group-header-rendering.js",
     "scripts/rolling-overrides.js",
     "scripts/settings.js",
-    "scripts/shared.js"
+    "scripts/shared.js",
+    "scripts/carousel-integration.js"
   ],
   "styles": [
     "styles/styles.css"

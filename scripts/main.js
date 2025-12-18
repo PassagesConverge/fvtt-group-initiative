@@ -4,6 +4,7 @@ import { onDeleteCombat, onCreateCombatant, onUpdateCombat, combatTrackerRenderi
 import { groupHeaderRendering } from "./group-header-rendering.js";
 import { GroupManager, GroupContextMenuManager } from "./class-objects.js";
 import { overrideRollMethods } from "./rolling-overrides.js";
+import { initCarouselIntegration } from "./carousel-integration.js";
 
 // Bind hooks in main.js — logic is exported from hooks.js
 Hooks.once("init", () => {
@@ -31,6 +32,14 @@ Hooks.once("ready", () => {
         overrideRollMethods();
     } catch (err) {
         console.error(`[${MODULE_ID}] Error in overrideRollMethods:`, err);
+    }
+});
+
+Hooks.once("ready", () => {
+    try {
+        initCarouselIntegration();
+    } catch (err) {
+        console.error(`[${MODULE_ID}] Error initializing Carousel integration:`, err);
     }
 });
 
