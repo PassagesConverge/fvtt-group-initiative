@@ -6,12 +6,34 @@ import { GroupManager, GroupContextMenuManager } from "./class-objects.js";
 import { overrideRollMethods } from "./rolling-overrides.js";
 
 // Bind hooks in main.js — logic is exported from hooks.js
-Hooks.once("init", registerSettings);
+Hooks.once("init", () => {
+    try {
+        registerSettings();
+    } catch (err) {
+        console.error(`[${MODULE_ID}] Error registering settings:`, err);
+    }
+});
+
 Hooks.on("deleteCombat", onDeleteCombat);
 Hooks.on("createCombatant", onCreateCombatant);
 Hooks.on("updateCombat", onUpdateCombat);
-Hooks.once("ready", groupHeaderRendering);
-Hooks.once("ready", overrideRollMethods);
+
+Hooks.once("ready", () => {
+    try {
+        groupHeaderRendering();
+    } catch (err) {
+        console.error(`[${MODULE_ID}] Error in groupHeaderRendering:`, err);
+    }
+});
+
+Hooks.once("ready", () => {
+    try {
+        overrideRollMethods();
+    } catch (err) {
+        console.error(`[${MODULE_ID}] Error in overrideRollMethods:`, err);
+    }
+});
+
 Hooks.on("renderCombatTracker", combatTrackerRendering);
 
 Hooks.on("updateCombatant", async (combatant, changes) => {

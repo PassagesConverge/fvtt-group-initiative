@@ -20,6 +20,7 @@ import { attachContextMenu } from "./combat-tracker.js";
 
 // Injects custom group header elements into the combat tracker.
 export async function groupHeaderRendering() {
+    log(`[${MODULE_ID}] groupHeaderRendering called`);
     /* ------------------------------------------------------------------
      * Create or locate a helper NPC (enables some token‑drag scenarios).
      * Only GMs should attempt creation to avoid permission errors in v13.
@@ -32,56 +33,347 @@ export async function groupHeaderRendering() {
     if (actor) {
         game.modules.get(MODULE_ID).groupHelperActor = actor;
     } else if (game.user.isGM) {
-        const [newActor] = await Actor.createDocuments([
-            {
-                name: ACTOR_NAME,
-                type: "npc",
-                img: "icons/svg/temple.svg",
-                token: { name: ACTOR_NAME, img: "icons/svg/temple.svg", disposition: -1 },
-                flags: { [MODULE_ID]: { isGroupHelper: true } }
+        try {
+            const [newActor] = await game.actors.documentClass.createDocuments([
+                {
+                    name: ACTOR_NAME,
+                    type: "npc",
+                    img: "icons/svg/temple.svg",
+                    token: { name: ACTOR_NAME, img: "icons/svg/temple.svg", disposition: -1 },
+                    flags: { [MODULE_ID]: { isGroupHelper: true } }
+                }
+            ]);
+            if (newActor) {
+                game.modules.get(MODULE_ID).groupHelperActor = newActor;
             }
-        ]);
-        if (newActor) {
-            game.modules.get(MODULE_ID).groupHelperActor = newActor;
+        } catch (err) {
+            console.warn(`[${MODULE_ID}] Failed to create helper actor:`, err);
         }
     }
+}
 
-    /* ------------------------------------------------------------------
-     * Patch CombatTracker.render to add group header rendering.
-     * ------------------------------------------------------------------ */
-    const CT = ui.combat?.constructor;
-    if (!CT) {
-        console.warn(`[${MODULE_ID}] Could not locate CombatTracker class.`);
+/**
+ * Standalone function to render group headers in the combat tracker
+ * Call this from renderCombatTracker hook
+ */
+export function renderGroupHeaders(html) {
+    console.log("[squad-combat-initiative] *** renderGroupHeaders called START ***");
+    
+    try {
+        const combat = game.combat;
+        if (!combat) {
+            log(`[${MODULE_ID}] No active combat, skipping renderGroupHeaders`);
+            return;
+        }
+
+        const expandedGroups = expandStore.load(combat.id);
+        const flagGroups = foundry.utils.getProperty(combat, `flags.${MODULE_ID}.groups`) || {};
+        const groups = GroupManager.getGroups(combat.turns, combat);
+
+        const V13 = game.release.generation >= 13;
+        
+        // v13 selector fix - try multiple selectors
+        let list = html.querySelector(".directory-list");
+        if (!list) list = html.querySelector(".combat-tracker");
+        if (!list) list = html.querySelector("ol");
+        if (!list) {
+            console.log("[squad-combat-initiative] Could not find combat list element");
+            console.log("[squad-combat-initiative] html:", html);
+            console.log("[squad-combat-initiative] html.children:", html.children);
+            return;
+        }
+
+        log(`[${MODULE_ID}] Found list element, rendering ${groups.size} groups`);
+
+        /* Clear any group headers from a previous render pass. */
+        list.querySelectorAll("li.combatant-group[data-group-key]").forEach(el => el.remove());
+
+        /* Create new group headers and insert them into the tracker. */
+        for (const [groupId, groupData] of groups.entries()) {
+            if (groupId === "ungrouped") continue;
+
+            const groupCfg = flagGroups[groupId] || {};
+            const initiativegroupName = groupCfg.name ?? groupData.name ?? "Unnamed Group";
+            const canManage = game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT;
+            const combatants = groupData.members;
+            const img = groupCfg.img || "icons/svg/combat.svg";
+            const color = groupCfg.color || "#000000";
+            const expanded = expandedGroups.has(groupId);
+
+            log(`[${MODULE_ID}] Rendering group: ${groupId}`);
+
+            // Prefer stored average initiative; fallback to recomputed rounded mean.
+            let avgInit = null;
+            if (combatants.length > 0) {
+                const allHaveInitiative = combatants.every(c => Number.isFinite(c.initiative));
+                if (allHaveInitiative && combatants.length > 0) {
+                    avgInit = combat.getFlag(MODULE_ID, `groups.${groupId}`)?.initiative;
+                    if (!Number.isFinite(avgInit)) {
+                        const vals = combatants.map(c => c.initiative);
+                        avgInit = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+                    }
+                }
+            }
+
+            const count = game.i18n.format(
+                `DND5E.COMBATANT.Counted.${getPluralRules().select(combatants.length)}`,
+                { number: formatNumber(combatants.length) }
+            );
+
+            /* Build DOM <li> for the header. */
+            const groupContainer = document.createElement("li");
+            groupContainer.classList.add("combatant-group", "collapsible", "dnd5e2-collapsible");
+            if (!V13) groupContainer.classList.add("directory-item");
+            if (!expanded) groupContainer.classList.add("collapsed");
+            groupContainer.dataset.groupKey = groupId;
+            groupContainer.dataset.groupColor = color;
+            groupContainer.style.setProperty("--group-color", color);
+
+            groupContainer.innerHTML = /*html*/`
+            <div class="group-header grid-layout">
+              <div class="header-img">
+                <img class="token-image" src="${img}" title="Group icon for ${initiativegroupName}">
+              </div>
+              ${canManage ? `
+                <div class="header-buttons group-controls">
+                  <a class="combat-button group-pin"    title="Pin Group"><i class="fas fa-thumbtack"></i></a>
+                  <a class="combat-button group-reset"  title="Reset Initiative"><i class="fas fa-undo"></i></a>
+                  <a class="combat-button group-roll"   title="Roll Initiative"><i class="fa-solid fa-dice-d20"></i></a>
+                  <a class="combat-button group-delete" title="Delete Group"><i class="fa-solid fa-xmark"></i></a>
+                </div>
+                ` : ``}                
+              <div class="header-name token-name">
+                <strong class="name">${initiativegroupName}</strong>
+                <div class="group-numbers">${count}</div>
+              </div>
+              <div class="header-init group-initiative-value">
+                ${Number.isFinite(avgInit) ? formatNumber(avgInit) : ""}
+              </div>
+                <div class="collapse-toggle header-toggle">
+                <i class="fa-solid fa-chevron-down"></i>
+                </div>
+            </div>
+            <div class="collapsible-content">
+              <div class="wrapper">
+                <ol class="group-children ${V13 ? "" : "directory-list"}"></ol>
+              </div>
+            </div>
+          `;
+
+            /* Move member <li> nodes under the new header. */
+            let children = combatants.map(c => list.querySelector(`li[data-combatant-id="${c.id}"]`)).filter(Boolean);
+            if (!children.length) {
+                children = combatants.map(c => list.querySelector(`li[data-id="${c.id}"]`)).filter(Boolean);
+            }
+
+            const target = groupContainer.querySelector(".group-children");
+            if (children.length) {
+                log(`[${MODULE_ID}] Found ${children.length} children for group ${groupId}`);
+                children[0].before(groupContainer);
+                target.replaceChildren(...children);
+            } else {
+                log(`[${MODULE_ID}] No children found for group ${groupId}`);
+                target.innerHTML = '<li class="no-members">No members</li>';
+                list.insertBefore(groupContainer, list.firstChild);
+            }
+
+            // Add event listeners for interactive controls...
+            if (game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT) {
+                const initiativeDisplay = groupContainer.querySelector(".group-initiative-value");
+                initiativeDisplay?.addEventListener("dblclick", async event => {
+                    event.stopPropagation();
+                    const currentValue = parseFloat(initiativeDisplay.textContent.trim());
+                    if (isNaN(currentValue)) return;
+
+                    const input = document.createElement("input");
+                    input.type = "number";
+                    input.step = "any";
+                    input.value = currentValue;
+                    input.classList.add("group-initiative-edit");
+                    initiativeDisplay.replaceWith(input);
+                    input.focus();
+
+                    const applyChange = async () => {
+                        const newBase = parseFloat(input.value);
+                        if (isNaN(newBase)) return ui.combat.render();
+
+                        const updates = combatants.map(c => ({
+                            _id: c.id,
+                            initiative: newBase + ((c.initiative ?? 0) - currentValue)
+                        }));
+                        if (GMPERMISSIONS()) {
+                            await combat.updateEmbeddedDocuments("Combatant", updates);
+                        }
+                        if (GMPERMISSIONS()) {
+                            await combat.setFlag(MODULE_ID, `groups.${groupId}.initiative`, newBase);
+                        }
+                        ui.combat.render();
+                    };
+
+                    input.addEventListener("blur", applyChange);
+                    input.addEventListener("keydown", e => {
+                        if (e.key === "Enter") input.blur();
+                        if (e.key === "Escape") ui.combat.render();
+                    });
+                });
+            }
+
+            if (canManage) {
+                const pinBtn = groupContainer.querySelector(".group-pin");
+                if (flagGroups[groupId]?.pinned) {
+                    pinBtn.classList.add("pinned");
+                    pinBtn.setAttribute("title", "Unpin Group");
+                }
+                pinBtn?.addEventListener("click", async event => {
+                    event.stopPropagation();
+                    const newState = !(flagGroups[groupId]?.pinned ?? false);
+                    if (GMPERMISSIONS()) {
+                        await combat.setFlag(MODULE_ID, `groups.${groupId}.pinned`, newState);
+                    }
+                    pinBtn.classList.toggle("pinned", newState);
+                    pinBtn.setAttribute("title", newState ? "Unpin Group" : "Pin Group");
+                    ui.combat.render();
+                });
+
+                groupContainer.querySelector(".group-reset")?.addEventListener("click", async event => {
+                    event.stopPropagation();
+                    const confirmed = await new Promise(res => {
+                        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                        new DialogClass({
+                            title: `Reset Initiative for \"${initiativegroupName}\"`,
+                            content: "<p>Clear initiative for all members of this group?</p>",
+                            buttons: {
+                                yes: { label: "Yes", callback: () => res(true) },
+                                no: { label: "No", callback: () => res(false) }
+                            },
+                            default: "no"
+                        }).render(true);
+                    });
+                    if (!confirmed) return;
+
+                    const updates = combatants.map(c => ({ _id: c.id, initiative: null }));
+                    if (GMPERMISSIONS()) {
+                        await combat.updateEmbeddedDocuments("Combatant", updates);
+                    }
+                    if (GMPERMISSIONS()) {
+                        await combat.unsetFlag(MODULE_ID, `groups.${groupId}.initiative`);
+                    }
+                    ui.notifications.info(`Initiative cleared for group "${initiativegroupName}".`);
+                    ui.combat.render();
+                });
+
+                groupContainer.querySelector(".group-delete")?.addEventListener("click", async event => {
+                    event.stopPropagation();
+                    const confirmed = await new Promise(res => {
+                        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                        new DialogClass({
+                            title: `Delete Group \"${initiativegroupName}\"`,
+                            content: "<p>Delete this group and unassign its members?</p>",
+                            buttons: {
+                                yes: { label: "Yes", callback: () => res(true) },
+                                no: { label: "No", callback: () => res(false) }
+                            },
+                            default: "no"
+                        }).render(true);
+                    });
+                    if (!confirmed) return;
+                    if (GMPERMISSIONS()) {
+                        await combat.unsetFlag(MODULE_ID, `groups.${groupId}`);
+                    }
+                    if (GMPERMISSIONS()) {
+                        for (const c of combatants) await c.unsetFlag(MODULE_ID, "groupId");
+                    }
+                    ui.combat.render();
+                });
+            }
+
+            groupContainer.addEventListener("click", event => {
+                const insideControls =
+                    event.target.closest(".group-controls") ||
+                    event.target.closest(".group-initiative-value") ||
+                    event.target.closest(".group-initiative-edit");
+                if (insideControls || event.target.closest(".collapsible-content")) return;
+
+                const collapsed = groupContainer.classList.toggle("collapsed");
+                setTimeout(() => {
+                    if (collapsed) expandedGroups.delete(groupId);
+                    else expandedGroups.add(groupId);
+                    expandStore.save(combat.id, expandedGroups);
+                }, 310);
+            });
+        }
+
+        if (game.user.role === CONST.USER_ROLES.GAMEMASTER) {
+            attachContextMenu($(list));
+        }
+
+        log(`[${MODULE_ID}] renderGroupHeaders completed`);
+    } catch (err) {
+        console.error("[squad-combat-initiative] Error in renderGroupHeaders:", err);
+        console.error("[squad-combat-initiative] Stack:", err.stack);
+    }
+}
+
+function setupRenderGroups(CT) {
+    if (CT.prototype.renderGroups) {
+        log(`[${MODULE_ID}] renderGroups already patched, skipping...`);
         return;
     }
+
+    log(`[${MODULE_ID}] Setting up renderGroups on ${CT.name}...`);
 
     // ------------------------------------------------------------------
     //  Extend CombatTracker with renderGroups (called by renderCombatTracker).
     // ------------------------------------------------------------------
     CT.prototype.renderGroups = function (html) {
-        log("renderGroups called");                         // obeys enableLogging setting
+        try {
+            console.log("[squad-combat-initiative] *** renderGroups called START ***");
+            
+            log("renderGroups called");                         // obeys enableLogging setting
+            console.log("[squad-combat-initiative] renderGroups called, this:", this);
+            console.log("[squad-combat-initiative] html:", html);
 
-        const combat = this.viewed;
-        if (!combat) return; // ⬅️ Bail early if no combat to avoid crash
+            const combat = this.viewed;
+            console.log("[squad-combat-initiative] combat:", combat);
+            if (!combat) {
+                console.log("[squad-combat-initiative] No combat, returning early");
+                return;
+            }
 
-        const expandedGroups = expandStore.load(combat.id);
+            const expandedGroups = expandStore.load(combat.id);
 
+            const flagGroups = foundry.utils.getProperty(combat, `flags.${MODULE_ID}.groups`) || {};
+            const groups = GroupManager.getGroups(combat.turns, combat);  // Map<groupId, { name, members }>
 
-        const flagGroups = foundry.utils.getProperty(combat, `flags.${MODULE_ID}.groups`) || {};
-        const groups = GroupManager.getGroups(combat.turns, combat);  // Map<groupId, { name, members }>
+            const V13 = game.release.generation >= 13;
+            
+            // v13 selector fix - try multiple selectors
+            let list = html.querySelector(".directory-list");
+            if (!list) list = html.querySelector(".combat-tracker");
+            if (!list) list = html.querySelector("ol");
+            if (!list) {
+                log(`[${MODULE_ID}] Could not find combat list element`);
+                log(`[${MODULE_ID}] html element:`, html);
+                log(`[${MODULE_ID}] html.children:`, html.children);
+                console.log("[squad-combat-initiative] HTML structure:", html.outerHTML?.substring(0, 500));
+                return;
+            }
 
-        const V13 = game.release.generation >= 13;
-        const list = html.querySelector(".directory-list, .combat-tracker");
-        if (!list) return;
+            log(`[${MODULE_ID}] Found list element:`, list);
 
-        /* Clear any group headers from a previous render pass. */
-        list.querySelectorAll("li.combatant-group[data-group-key]").forEach(el => el.remove());
+            /* Clear any group headers from a previous render pass. */
+            list.querySelectorAll("li.combatant-group[data-group-key]").forEach(el => el.remove());
 
-        /* --------------------------------------------------------------
-         * Create new group headers and insert them into the tracker.
-         * -------------------------------------------------------------- */
-        for (const [groupId, groupData] of groups.entries()) {
-            if (groupId === "ungrouped") continue;   // don’t render the default holder
+            /* --------------------------------------------------------------
+             * Create new group headers and insert them into the tracker.
+             * -------------------------------------------------------------- */
+            log(`[${MODULE_ID}] Groups found:`, groups.size);
+            for (const [groupId, groupData] of groups.entries()) {
+                log(`[${MODULE_ID}] Processing group:`, groupId, "members:", groupData.members.length);
+                if (groupId === "ungrouped") {
+                    log(`[${MODULE_ID}] Skipping ungrouped`);
+                    continue;
+                }
             const groupCfg = flagGroups[groupId] || {};
             const initiativegroupName = groupCfg.name ?? groupData.name ?? "Unnamed Group";
             const canManage = game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT;
@@ -166,13 +458,28 @@ export async function groupHeaderRendering() {
              *  Move member <li> nodes under the new header.
              * ---------------------------------------------------------- */
             const selector = combatants.map(c => `[data-combatant-id="${c.id}"]`).join(", ");
-            const children = selector ? Array.from(list.querySelectorAll(selector)) : [];
+            let children = selector ? Array.from(list.querySelectorAll(selector)) : [];
+            
+            // Fallback: try li elements with data attributes in v13
+            if (!children.length) {
+                children = combatants.map(c => {
+                    // Try multiple possible selectors
+                    return list.querySelector(`li[data-combatant-id="${c.id}"]`) ||
+                           list.querySelector(`li[data-id="${c.id}"]`) ||
+                           list.querySelector(`li[data-combat-id="${c.id}"]`);
+                }).filter(Boolean);
+            }
+
+            log(`[${MODULE_ID}] Group selector:`, selector);
+            log(`[${MODULE_ID}] Children found:`, children.length);
 
             const target = groupContainer.querySelector(".group-children");
             if (children.length) {
+                log(`[${MODULE_ID}] Inserting group before first child`);
                 children[0].before(groupContainer);
                 target.replaceChildren(...children);
             } else {
+                log(`[${MODULE_ID}] No children found, inserting as first element`);
                 target.innerHTML = '<li class="no-members">No members</li>';
                 list.insertBefore(groupContainer, list.firstChild);
             }
@@ -260,9 +567,17 @@ export async function groupHeaderRendering() {
                 groupContainer.querySelector(".group-reset")
                     ?.addEventListener("click", async event => {
                         event.stopPropagation();
-                        const confirmed = await Dialog.confirm({
-                            title: `Reset Initiative for "${initiativegroupName}"`,
-                            content: "<p>Clear initiative for all members of this group?</p>"
+                        const confirmed = await new Promise(res => {
+                            const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                            new DialogClass({
+                                title: `Reset Initiative for \"${initiativegroupName}\"`,
+                                content: "<p>Clear initiative for all members of this group?</p>",
+                                buttons: {
+                                    yes: { label: "Yes", callback: () => res(true) },
+                                    no: { label: "No", callback: () => res(false) }
+                                },
+                                default: "no"
+                            }).render(true);
                         });
                         if (!confirmed) return;
 
@@ -285,9 +600,17 @@ export async function groupHeaderRendering() {
                 groupContainer.querySelector(".group-delete")
                     ?.addEventListener("click", async event => {
                         event.stopPropagation();
-                        const confirmed = await Dialog.confirm({
-                            title: `Delete Group "${initiativegroupName}"`,
-                            content: "<p>Delete this group and unassign its members?</p>"
+                        const confirmed = await new Promise(res => {
+                            const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                            new DialogClass({
+                                title: `Delete Group \"${initiativegroupName}\"`,
+                                content: "<p>Delete this group and unassign its members?</p>",
+                                buttons: {
+                                    yes: { label: "Yes", callback: () => res(true) },
+                                    no: { label: "No", callback: () => res(false) }
+                                },
+                                default: "no"
+                            }).render(true);
                         });
                         if (!confirmed) return;
                         if (GMPERMISSIONS()) {
@@ -323,7 +646,23 @@ export async function groupHeaderRendering() {
         if (game.user.role === CONST.USER_ROLES.GAMEMASTER) {
             attachContextMenu($(list));
         }
+        } catch (err) {
+            console.error("[squad-combat-initiative] Error in renderGroups:", err);
+        }
     };
+
+    // Hook into the renderCombatTracker event to call renderGroups
+    Hooks.on("renderCombatTracker", (app, html) => {
+        try {
+            if (app.renderGroups) {
+                // Convert html to native element if needed
+                const element = html instanceof jQuery ? html[0] : html;
+                app.renderGroups(element);
+            }
+        } catch (err) {
+            console.error(`[${MODULE_ID}] Error in renderGroups hook:`, err);
+        }
+    });
 
     log(`✅ ${MODULE_ID} | renderGroups injected and ${CT.name}.render patched.`);
 }

@@ -187,11 +187,18 @@ export class GroupContextMenuManager {
   /* -- Prompt helper -- */
   static async prompt(title, msg, defVal = "") {
     return new Promise(res => {
-      new Dialog({
+      const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+      new DialogClass({
         title,
         content: `<p>${msg}</p><input type="text" value="${defVal}" style="width:100%">`,
         buttons: {
-          ok: { label: "OK", callback: html => res(html.find("input").val().trim()) },
+          ok: { 
+            label: "OK", 
+            callback: html => {
+              const $html = html instanceof jQuery ? html : $(html);
+              res($html.find("input").val().trim());
+            }
+          },
           cancel: { label: "Cancel", callback: () => res(null) }
         },
         default: "ok"
@@ -265,9 +272,17 @@ function deleteOption() {
       const groupId = li?.[0]?.closest(".combatant-group")?.dataset?.groupKey;
       if (!groupId) return ui.notifications.warn("Could not determine group.");
 
-      const ok = await Dialog.confirm({
-        title: `Delete Group \"${groupId}\"`,
-        content: `<p>Delete this group and unassign its members?</p>`
+      const ok = await new Promise(res => {
+        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+        new DialogClass({
+          title: `Delete Group \"${groupId}\"`,
+          content: `<p>Delete this group and unassign its members?</p>`,
+          buttons: {
+            yes: { label: "Yes", callback: () => res(true) },
+            no: { label: "No", callback: () => res(false) }
+          },
+          default: "no"
+        }).render(true);
       });
       if (!ok) return;
 

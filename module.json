@@ -11,11 +11,12 @@
     }
   ],
   "compatibility": {
-    "minimum": "12",
+    "minimum": "13",
     "verified": "13"
   },
   "relationships": {
-    "requires": [
+    "requires": [],
+    "recommends": [
       {
         "id": "lib-wrapper",
         "type": "module",

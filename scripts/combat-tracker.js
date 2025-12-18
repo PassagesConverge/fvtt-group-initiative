@@ -11,6 +11,7 @@
 import { MODULE_ID, log, generateGroupId, expandStore, GMPERMISSIONS } from "./shared.js";
 import { GroupManager, GroupContextMenuManager } from "./class-objects.js";
 import { wrapped } from "./rolling-overrides.js";
+import { renderGroupHeaders } from "./group-header-rendering.js";
 
 const SELECTORS = {
     list: "ol.directory-list, .combat-tracker",
@@ -24,12 +25,23 @@ const SELECTORS = {
 export function combatTrackerRendering(_app, html) {
     if (!game.user.isGM) return;                    // Only GMs manage groups
 
-    ensureAddGroupButton(html);
+    // v13 passes native DOM elements, convert to jQuery for compatibility
+    const $html = html instanceof jQuery ? html : $(html);
+
+    ensureAddGroupButton($html);
     const combat = game.combat;
     if (!combat) return;                            // Nothing to do otherwise
 
-    enableTokenDrag(combat, html);
-    registerDropTargets(combat, html);
+    // Render group headers directly
+    try {
+        const htmlElement = html instanceof jQuery ? html[0] : html;
+        renderGroupHeaders(htmlElement);
+    } catch (err) {
+        console.error("[squad-combat-initiative] Error in renderGroupHeaders:", err);
+    }
+
+    enableTokenDrag(combat, $html);
+    registerDropTargets(combat, $html);
 }
 
 /* ---------- helpers ---------- */
@@ -38,41 +50,67 @@ export function combatTrackerRendering(_app, html) {
 function ensureAddGroupButton(html) {
     if (html.find(".create-group-button").length) return;
 
-    const $btn = $(`<button type="button" class="create-group-button">➕ Add Group</button>`);
+    const $btn = $(`<button type="button" class="create-group-button">➕ Add Group</button>`);
     const $target = findAddGroupButtonContainer(html);
     if ($target?.length) {
         $target.prepend($btn);
+        log(`[${MODULE_ID}] Button added to target container`);
     } else {
         log(`[${MODULE_ID}] Could not find combat controls; adding button to top of tracker.`);
         const $list = html.find(SELECTORS.list).first();
         if ($list.length) $list.before($btn);
         else html.prepend($btn);
     }
-    $btn.on("click", openCreateGroupDialog);
+    $btn.on("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openCreateGroupDialog();
+    });
 }
 
 /** Locate the best place to inject the “Add Group” button across FVTT versions. */
 function findAddGroupButtonContainer(html) {
     const candidates = [
-        "#combat-controls",                    // v12+
-        ".combat-controls",                    // generic fallback
-        ".encounter-controls",                 // v13 header layout
-        ".combat-tracker-header .header-actions"
+        ".combat-tracker-header .controls",        // v13 standard
+        ".combat-tracker-header",                  // v13 fallback
+        ".encounter-controls",                     // v13 alternative
+        "#combat-controls",                        // v12+
+        ".combat-controls",                        // generic fallback
+        ".combat-tracker-header .header-actions",
+        "[data-application-part='header']"         // v13 generic header
     ];
 
     for (const selector of candidates) {
         const $el = html.find(selector).first();
-        if ($el.length) return $el;
+        if ($el.length) {
+            log(`[${MODULE_ID}] Found button container at: ${selector}`);
+            return $el;
+        }
+    }
+
+    // Fallback: look for header class variations
+    const $header = html.find("header, .header, [role='banner']").first();
+    if ($header.length) {
+        log(`[${MODULE_ID}] Using header as container`);
+        return $header;
     }
 
     const $tracker = html.find(".combat-tracker").first();
-    if ($tracker.length && !$tracker.is("ol, ul")) return $tracker;
+    if ($tracker.length && !$tracker.is("ol, ul")) {
+        log(`[${MODULE_ID}] Using .combat-tracker as container`);
+        return $tracker;
+    }
 
     const $list = html.find(SELECTORS.list).first();
-    if ($list.length) return $list.parent();
+    if ($list.length) {
+        log(`[${MODULE_ID}] Using list parent as container`);
+        return $list.parent();
+    }
 
+    log(`[${MODULE_ID}] No container found, will use html root`);
     return html;
 }
+
 
 /** Marks combatant <li> nodes draggable once per render. */
 function enableTokenDrag(combat, html) {
@@ -187,11 +225,9 @@ export function attachContextMenu($list) {
         return;
     }
 
-    new ContextMenu(
-        $list[0],
-        SELECTORS.groupHead,
-        GroupContextMenuManager.getContextOptions()
-    );
+    // v13+ ContextMenu API requires rendering differently
+    const options = GroupContextMenuManager.getContextOptions();
+    new ContextMenu($list[0], SELECTORS.groupHead, options, { eventName: "contextmenu" });
 }
 
 /* ------------------------------------------------------------------ */
@@ -268,7 +304,9 @@ async function openCreateGroupDialog() {
 /** Small dialog → returns {name,img,color} or null. */
 function promptGroupData() {
     return new Promise(res => {
-        new Dialog({
+        // v13 uses Dialog from legacy compatibility - this is intentional
+        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+        new DialogClass({
             title: "Create New Group",
             content: `
         <p>Name:</p>
@@ -284,26 +322,31 @@ function promptGroupData() {
             buttons: {
                 ok: {
                     label: "Create",
-                    callback: html => res({
-                        name: html.find("#g-name").val().trim(),
-                        img: html.find("#g-img").val().trim(),
-                        color: html.find("#g-color").val().trim()
-                    })
+                    callback: html => {
+                        const $html = html instanceof jQuery ? html : $(html);
+                        res({
+                            name: $html.find("#g-name").val().trim(),
+                            img: $html.find("#g-img").val().trim(),
+                            color: $html.find("#g-color").val().trim()
+                        });
+                    }
                 },
                 cancel: { label: "Cancel", callback: () => res(null) }
             },
             default: "ok",
         }).render(true);
 
-        Hooks.once("renderDialog", (_app, $html) =>
-            $html.find("#g-img-picker").on("click", () =>
-                new FilePicker({
+        Hooks.once("renderDialog", (_app, $html) => {
+            const $dialog = $html instanceof jQuery ? $html : $($html);
+            $dialog.find("#g-img-picker").on("click", async () => {
+                const fp = new FilePicker({
                     type: "image",
                     current: "icons/",
-                    callback: path => $html.find("#g-img").val(path)
-                }).render(true)
-            )
-        );
+                    callback: path => $dialog.find("#g-img").val(path)
+                });
+                await fp.browse();
+            });
+        });
     });
 }
 
