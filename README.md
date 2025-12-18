@@ -28,8 +28,7 @@ Or select multiple actors and click “Add Group”
 - Customize group headers (name, color, icon)
 
 🧪 Compatibility
-- Works with Foundry VTT v12
-- v13 support is planned but not yet tested
+- Works with Foundry VTT v12 and v13
 - Built for the D&D5e system
 
 MIT © 2025 Somedude5

@@ -173,8 +173,13 @@ async function openCreateGroupDialog() {
 
     /* Ensure combat encounter exists. */
     let combat = game.combat;
+    const sceneId = canvas.scene?.id;
+    if (!sceneId) {
+        ui.notifications.warn("You must have an active scene to create initiative groups.");
+        return;
+    }
     if (!combat) {
-        combat = await game.combats.documentClass.create({ scene: canvas.scene.id });
+        combat = await game.combats.documentClass.create({ scene: sceneId });
         await combat.activate();
     }
 
@@ -209,7 +214,7 @@ async function openCreateGroupDialog() {
         const docs = missing.map((t, i) => ({
             tokenId: t.id,
             actorId: t.actor?.id,
-            sceneId: canvas.scene.id,
+            sceneId,
             sort: maxSort + (i + 1) * 100,
         }));
         await combat.createEmbeddedDocuments("Combatant", docs);

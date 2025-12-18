@@ -22,6 +22,7 @@ import { attachContextMenu } from "./combat-tracker.js";
 export async function groupHeaderRendering() {
     /* ------------------------------------------------------------------
      * Create or locate a helper NPC (enables some token‑drag scenarios).
+     * Only GMs should attempt creation to avoid permission errors in v13.
      * ------------------------------------------------------------------ */
     const ACTOR_NAME = "[Group Placeholder]";
     const actor = game.actors.find(
@@ -30,14 +31,19 @@ export async function groupHeaderRendering() {
 
     if (actor) {
         game.modules.get(MODULE_ID).groupHelperActor = actor;
-    } else {
-        Actor.create({
-            name: ACTOR_NAME,
-            type: "npc",
-            img: "icons/svg/temple.svg",
-            token: { name: ACTOR_NAME, img: "icons/svg/temple.svg", disposition: -1 },
-            flags: { [MODULE_ID]: { isGroupHelper: true } }
-        }).then(newActor => game.modules.get(MODULE_ID).groupHelperActor = newActor);
+    } else if (game.user.isGM) {
+        const [newActor] = await Actor.createDocuments([
+            {
+                name: ACTOR_NAME,
+                type: "npc",
+                img: "icons/svg/temple.svg",
+                token: { name: ACTOR_NAME, img: "icons/svg/temple.svg", disposition: -1 },
+                flags: { [MODULE_ID]: { isGroupHelper: true } }
+            }
+        ]);
+        if (newActor) {
+            game.modules.get(MODULE_ID).groupHelperActor = newActor;
+        }
     }
 
     /* ------------------------------------------------------------------
