@@ -69,6 +69,37 @@ export function initCarouselIntegration() {
                 }
             }
         });
+
+        // Wrap Combat.rollInitiative to handle group proxy IDs
+        const originalRollInitiative = Combat.prototype.rollInitiative;
+        Combat.prototype.rollInitiative = async function(ids, options = {}) {
+            // Separate group proxy IDs from real combatant IDs
+            const groupIds = [];
+            const realIds = [];
+
+            for (const id of ids) {
+                if (id.startsWith("group-")) {
+                    // Extract the actual groupId from "group-gr-xxxxx"
+                    const actualGroupId = id.replace("group-", "");
+                    groupIds.push(actualGroupId);
+                } else {
+                    realIds.push(id);
+                }
+            }
+
+            // Roll initiative for groups using GroupManager
+            for (const groupId of groupIds) {
+                log(`[${MODULE_ID}] Rolling initiative for group ${groupId}`);
+                await GroupManager.rollGroupAndApplyInitiative(this, groupId, { mode: "normal" });
+            }
+
+            // Roll initiative for real combatants normally
+            if (realIds.length > 0) {
+                return originalRollInitiative.call(this, realIds, options);
+            }
+        };
+        
+        log(`[${MODULE_ID}] ✅ Combat.rollInitiative wrapped for group support`);
     } catch (err) {
         console.error(`[${MODULE_ID}] Error initializing Carousel integration:`, err);
     }
