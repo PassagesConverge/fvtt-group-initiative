@@ -39,8 +39,39 @@ function ensureAddGroupButton(html) {
     if (html.find(".create-group-button").length) return;
 
     const $btn = $(`<button type="button" class="create-group-button">➕ Add Group</button>`);
-    html.find("#combat-controls").prepend($btn);
+    const $target = findAddGroupButtonContainer(html);
+    if ($target?.length) {
+        $target.prepend($btn);
+    } else {
+        log(`[${MODULE_ID}] Could not find combat controls; adding button to top of tracker.`);
+        const $list = html.find(SELECTORS.list).first();
+        if ($list.length) $list.before($btn);
+        else html.prepend($btn);
+    }
     $btn.on("click", openCreateGroupDialog);
+}
+
+/** Locate the best place to inject the “Add Group” button across FVTT versions. */
+function findAddGroupButtonContainer(html) {
+    const candidates = [
+        "#combat-controls",                    // v12+
+        ".combat-controls",                    // generic fallback
+        ".encounter-controls",                 // v13 header layout
+        ".combat-tracker-header .header-actions"
+    ];
+
+    for (const selector of candidates) {
+        const $el = html.find(selector).first();
+        if ($el.length) return $el;
+    }
+
+    const $tracker = html.find(".combat-tracker").first();
+    if ($tracker.length && !$tracker.is("ol, ul")) return $tracker;
+
+    const $list = html.find(SELECTORS.list).first();
+    if ($list.length) return $list.parent();
+
+    return html;
 }
 
 /** Marks combatant <li> nodes draggable once per render. */
