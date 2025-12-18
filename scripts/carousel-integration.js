@@ -13,6 +13,34 @@ import { GroupManager } from "./class-objects.js";
  * Wraps the CombatDock's sortedCombatants getter to filter combatants
  */
 export function initCarouselIntegration() {
+    // Helper that performs the actual wrapping for a given CombatDock class
+    function wrapCombatDockClass(CombatDockClass) {
+        try {
+            if (!CombatDockClass || CombatDockClass.prototype.__squadSCIWrapped) return false;
+            const descriptor = Object.getOwnPropertyDescriptor(CombatDockClass.prototype, "sortedCombatants");
+            if (!descriptor?.get) {
+                log(`[${MODULE_ID}] Could not find sortedCombatants getter on CombatDock`);
+                return false;
+            }
+            const originalGetter = descriptor.get;
+            Object.defineProperty(CombatDockClass.prototype, "sortedCombatants", {
+                get() {
+                    const allCombatants = originalGetter.call(this);
+                    return filterCombatantsForCarousel(allCombatants, this.combat);
+                },
+                enumerable: descriptor.enumerable,
+                configurable: descriptor.configurable,
+            });
+            // Mark wrapped to avoid double-wrapping
+            CombatDockClass.prototype.__squadSCIWrapped = true;
+            log(`[${MODULE_ID}] ✅ Carousel integration initialized (wrapped CombatDock)`);
+            return true;
+        } catch (err) {
+            console.error(`[${MODULE_ID}] Error wrapping CombatDock:`, err);
+            return false;
+        }
+    }
+
     try {
         const CarouselModule = game.modules.get("combat-tracker-dock");
         if (!CarouselModule?.active) {
@@ -20,32 +48,15 @@ export function initCarouselIntegration() {
             return;
         }
 
-        const CombatDock = CONFIG.combatTrackerDock?.CombatDock;
-        if (!CombatDock) {
-            log(`[${MODULE_ID}] CombatDock class not found in CONFIG`);
-            return;
+        // If the Combat Dock class is already registered on CONFIG, wrap it immediately.
+        if (CONFIG.combatTrackerDock?.CombatDock) {
+            wrapCombatDockClass(CONFIG.combatTrackerDock.CombatDock);
         }
 
-        // Get the original sortedCombatants getter
-        const descriptor = Object.getOwnPropertyDescriptor(CombatDock.prototype, "sortedCombatants");
-        if (!descriptor?.get) {
-            log(`[${MODULE_ID}] Could not find sortedCombatants getter on CombatDock`);
-            return;
-        }
-
-        const originalGetter = descriptor.get;
-
-        // Replace with our wrapped getter
-        Object.defineProperty(CombatDock.prototype, "sortedCombatants", {
-            get() {
-                const allCombatants = originalGetter.call(this);
-                return filterCombatantsForCarousel(allCombatants, this.combat);
-            },
-            enumerable: descriptor.enumerable,
-            configurable: descriptor.configurable,
+        // Also listen for the module's init hook in case it registers later.
+        Hooks.on("combat-tracker-dock-init", (cfg) => {
+            if (cfg?.CombatDock) wrapCombatDockClass(cfg.CombatDock);
         });
-
-        log(`[${MODULE_ID}] ✅ Carousel integration initialized`);
     } catch (err) {
         console.error(`[${MODULE_ID}] Error initializing Carousel integration:`, err);
     }
@@ -62,6 +73,18 @@ function filterCombatantsForCarousel(combatants, combat) {
 
     try {
         const groups = GroupManager.getGroups(combatants, combat);
+
+        // Ensure group membership reflects the current combatants array.
+        // If a stored group exists but had no members in the map (e.g., created after load),
+        // populate its members from the live combatants' flags so we can hide them.
+        for (const [groupId, groupData] of groups.entries()) {
+            if ((groupData.members?.length ?? 0) === 0) {
+                const membersFromFlags = combatants.filter(c => (c.getFlag && c.getFlag(MODULE_ID, "groupId") === groupId));
+                if (membersFromFlags.length) {
+                    groupData.members = membersFromFlags.slice();
+                }
+            }
+        }
         const result = [];
 
         // Add groups to the result
@@ -77,7 +100,7 @@ function filterCombatantsForCarousel(combatants, combat) {
         const groupedMemberIds = new Set();
         for (const [groupId, groupData] of groups.entries()) {
             if (groupId !== "ungrouped") {
-                groupData.members.forEach(m => groupedMemberIds.add(m.id));
+                (groupData.members || []).forEach(m => groupedMemberIds.add(m.id));
             }
         }
 
@@ -120,12 +143,39 @@ function createGroupCombatantProxy(groupId, groupData, combat) {
     // Create a proxy object that mimics a combatant
     const groupImg = groupCfg.img || "icons/svg/combat.svg";
     console.log(`[${MODULE_ID}] Creating group proxy for ${groupId} with image:`, groupImg);
+    // Compute average HP/max across members (best-effort across systems)
+    const hpCandidates = [];
+    console.log(`[${MODULE_ID}] Group ${groupId} has ${groupData.members.length} members, searching for HP...`);
+    for (const m of groupData.members) {
+        // Try common actor system paths for current and max HP
+        const cur = foundry.utils.getProperty(m, "actor.system.attributes.hp.value") ?? foundry.utils.getProperty(m, "actor.system.hp.value") ?? foundry.utils.getProperty(m, "actor.system.health.value");
+        const max = foundry.utils.getProperty(m, "actor.system.attributes.hp.max") ?? foundry.utils.getProperty(m, "actor.system.hp.max") ?? foundry.utils.getProperty(m, "actor.system.health.max");
+        console.log(`[${MODULE_ID}]   ${m.name}: cur=${cur}, max=${max}, actor=${m.actor?.name}`);
+        if (Number.isFinite(cur) && Number.isFinite(max) && max > 0) hpCandidates.push({ cur: Number(cur), max: Number(max) });
+    }
+
+    let avgCur = null;
+    let avgMax = null;
+    if (hpCandidates.length) {
+        avgCur = hpCandidates.reduce((s, v) => s + v.cur, 0);
+        avgMax = hpCandidates.reduce((s, v) => s + v.max, 0);
+        console.log(`[${MODULE_ID}]   Total HP: ${avgCur}/${avgMax}`);
+    } else {
+        console.log(`[${MODULE_ID}]   No HP data found for group members`);
+    }
+
     const proxy = {
         id: `group-${groupId}`,
         _id: `group-${groupId}`,
         name: groupName,
         initiative: groupInitiative,
-        actor: null,
+        actor: {
+            system: { attributes: { hp: { value: avgCur ?? null, max: avgMax ?? null } } },
+            temporaryEffects: [],
+            permission: -10,
+            hasPlayerOwner: false,
+            testUserPermission: (user, level) => false,
+        },
         combat: combat,  // Direct reference to combat
         img: groupImg,
         flags: {
@@ -164,6 +214,10 @@ function createGroupCombatantProxy(groupId, groupData, combat) {
         // Check ownership
         get isOwner() {
             return true;
+        },
+        // Mark defeated only if all members are defeated
+        get isDefeated() {
+            return groupData.members.length > 0 && groupData.members.every(m => m.isDefeated);
         },
         // Mock sort value
         sort: groupData.members.length > 0 

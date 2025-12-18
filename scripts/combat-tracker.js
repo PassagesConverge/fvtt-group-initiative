@@ -298,8 +298,11 @@ async function openCreateGroupDialog() {
     }
 
     ui.notifications.info(`Created group “${data.name}” with ${members.length} member(s).`);
-    ui.combat.render();
-}
+    ui.combat.render();    
+    // Refresh carousel to show filtered combatants
+    if (ui.combatDock) {
+        ui.combatDock.setupCombatants();
+    }}
 
 /** Small dialog → returns {name,img,color} or null. */
 function promptGroupData() {
@@ -415,7 +418,13 @@ export async function onUpdateCombat(combat, update) {
         log(`[${MODULE_ID}] renderCombatTracker hook fired.`);
 
         requestAnimationFrame(() => {
-            const list = html[0].querySelector(".directory-list, .combat-tracker");
+            const root = (html && html.querySelector) ? html : (html && html[0]) ? html[0] : null;
+            if (!root) {
+                console.warn(`[${MODULE_ID}] renderCombatTracker: no html root provided.`);
+                return;
+            }
+
+            const list = root.querySelector(".directory-list, .combat-tracker");
             if (!list) {
                 console.warn(`[${MODULE_ID}] No tracker list found.`);
                 return;
