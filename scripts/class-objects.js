@@ -70,7 +70,7 @@ export class GroupManager {
     for (const c of toRoll) {
       const dexMod = c.actor?.system?.abilities?.dex?.mod ?? 0;
       const roll = new Roll(`${dieExpr} + ${dexMod}`);
-      await roll.evaluate();
+      await roll.evaluate({ async: true });
 
       // Chat
       await roll.toMessage({
