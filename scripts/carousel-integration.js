@@ -57,6 +57,18 @@ export function initCarouselIntegration() {
         Hooks.on("combat-tracker-dock-init", (cfg) => {
             if (cfg?.CombatDock) wrapCombatDockClass(cfg.CombatDock);
         });
+
+        // Refresh carousel when a combatant's groupId changes (moved into/out of group)
+        Hooks.on("updateCombatant", (combatant, changes) => {
+            // Check if any flags changed that might affect groupId (both setFlag and unsetFlag)
+            const flagsChanged = foundry.utils.getProperty(changes, `flags.${MODULE_ID}`) !== undefined;
+            if (flagsChanged) {
+                log(`[${MODULE_ID}] Combatant flags changed, refreshing carousel`);
+                if (ui.combatDock) {
+                    ui.combatDock.setupCombatants();
+                }
+            }
+        });
     } catch (err) {
         console.error(`[${MODULE_ID}] Error initializing Carousel integration:`, err);
     }
