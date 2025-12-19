@@ -220,14 +220,20 @@ export function attachContextMenu($list) {
         return; // ⛔ prevent menu for players
     }
 
-    if (!$list?.length || typeof ContextMenu !== "function") {
+    if (!$list?.length) {
         console.warn("[GroupSort] No valid list found for ContextMenu attachment.");
         return;
     }
 
-    // v13+ ContextMenu API requires rendering differently
+    // v13+ ContextMenu API uses namespaced class and requires jQuery: false
+    const ContextMenuClass = foundry.applications.ux.ContextMenu.implementation;
+    if (!ContextMenuClass) {
+        console.warn("[GroupSort] ContextMenu class not available");
+        return;
+    }
+
     const options = GroupContextMenuManager.getContextOptions();
-    new ContextMenu($list[0], SELECTORS.groupHead, options, { eventName: "contextmenu" });
+    new ContextMenuClass($list[0], SELECTORS.groupHead, options, { eventName: "contextmenu", jQuery: false });
 }
 
 /* ------------------------------------------------------------------ */
