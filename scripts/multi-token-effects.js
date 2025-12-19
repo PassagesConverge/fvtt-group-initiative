@@ -8,7 +8,7 @@
 import { log } from "./shared.js";
 
 const MODULE_ID = "squad-combat-initiative";
-let lastEffectChangeOrigin = null;
+let isSyncing = false; // Flag to prevent cascading hook calls
 
 /**
  * Initialize multi-token effect synchronization
@@ -30,6 +30,11 @@ export function initMultiTokenEffects() {
  */
 async function onEffectCreate(effect, options, userId) {
     try {
+        // Ignore if we're already syncing (prevents cascade)
+        if (isSyncing) {
+            return;
+        }
+        
         // Ignore if this is a remote user's action
         if (userId !== game.userId) {
             return;
@@ -57,24 +62,37 @@ async function onEffectCreate(effect, options, userId) {
         console.log(`[${MODULE_ID}] Effect created: "${statusId}" on ${token.name}`);
         console.log(`[${MODULE_ID}] Syncing status "${statusId}" ON to ${selectedTokens.length} other selected token(s)`);
         
-        // Sync to all other selected tokens (turn effect ON)
-        for (const targetToken of selectedTokens) {
-            if (!targetToken.actor) continue;
-            
-            try {
-                // Check if target already has this effect
-                const targetHasEffect = targetToken.actor.effects?.some(e => e.statuses?.has(statusId)) ?? false;
+        // Set syncing flag to prevent cascade
+        isSyncing = true;
+        
+        try {
+            // Sync to all other selected tokens (turn effect ON)
+            for (const targetToken of selectedTokens) {
+                if (!targetToken.actor) continue;
                 
-                if (targetHasEffect) {
-                    console.log(`[${MODULE_ID}]   ${targetToken.name}: already has ${statusId}`);
-                    continue;
+                try {
+                    // Check if target already has this effect
+                    const targetHasEffect = targetToken.actor.effects?.some(e => e.statuses?.has(statusId)) ?? false;
+                    
+                    if (targetHasEffect) {
+                        console.log(`[${MODULE_ID}]   ${targetToken.name}: already has ${statusId}`);
+                        continue;
+                    }
+                    
+                    console.log(`[${MODULE_ID}]   Enabling ${statusId} on ${targetToken.name}`);
+                    await targetToken.actor.toggleStatusEffect(statusId, { active: true });
+                } catch (err) {
+                    // Silently ignore "already exists" errors - effect is already present
+                    if (err.message?.includes("already exists")) {
+                        console.log(`[${MODULE_ID}]   ${targetToken.name}: effect already present`);
+                    } else {
+                        console.warn(`[${MODULE_ID}] Failed to sync effect to ${targetToken.name}:`, err.message);
+                    }
                 }
-                
-                console.log(`[${MODULE_ID}]   Enabling ${statusId} on ${targetToken.name}`);
-                await targetToken.actor.toggleStatusEffect(statusId, { active: true });
-            } catch (err) {
-                console.warn(`[${MODULE_ID}] Failed to sync effect to ${targetToken.name}:`, err);
             }
+        } finally {
+            // Always clear the syncing flag
+            isSyncing = false;
         }
     } catch (err) {
         console.error(`[${MODULE_ID}] Error in createActiveEffect handler:`, err);
@@ -86,6 +104,11 @@ async function onEffectCreate(effect, options, userId) {
  */
 async function onEffectDelete(effect, options, userId) {
     try {
+        // Ignore if we're already syncing (prevents cascade)
+        if (isSyncing) {
+            return;
+        }
+        
         // Ignore if this is a remote user's action
         if (userId !== game.userId) {
             return;
@@ -113,44 +136,52 @@ async function onEffectDelete(effect, options, userId) {
         console.log(`[${MODULE_ID}] Effect deleted: "${statusId}" from ${token.name}`);
         console.log(`[${MODULE_ID}] Syncing status "${statusId}" OFF to ${selectedTokens.length} other selected token(s)`);
         
-        // Sync to all other selected tokens (turn effect OFF)
-        for (const targetToken of selectedTokens) {
-            if (!targetToken.actor) continue;
-            
-            try {
-                // Find all effects with this status on the target
-                const effectsToDelete = targetToken.actor.effects?.filter(e => e.statuses?.has(statusId)) ?? [];
+        // Set syncing flag to prevent cascade
+        isSyncing = true;
+        
+        try {
+            // Sync to all other selected tokens (turn effect OFF)
+            for (const targetToken of selectedTokens) {
+                if (!targetToken.actor) continue;
                 
-                if (effectsToDelete.length === 0) {
-                    console.log(`[${MODULE_ID}]   ${targetToken.name}: already doesn't have ${statusId}`);
-                    continue;
-                }
-                
-                // Get only the IDs that exist on the target actor
-                const effectIds = effectsToDelete.map(e => e.id).filter(id => {
-                    const exists = targetToken.actor.effects?.some(ef => ef.id === id);
-                    if (!exists) {
-                        console.log(`[${MODULE_ID}]   ${targetToken.name}: effect ${id} no longer exists, skipping`);
+                try {
+                    // Find all effects with this status on the target
+                    const effectsToDelete = targetToken.actor.effects?.filter(e => e.statuses?.has(statusId)) ?? [];
+                    
+                    if (effectsToDelete.length === 0) {
+                        console.log(`[${MODULE_ID}]   ${targetToken.name}: already doesn't have ${statusId}`);
+                        continue;
                     }
-                    return exists;
-                });
-                
-                if (effectIds.length === 0) {
-                    console.log(`[${MODULE_ID}]   ${targetToken.name}: no valid effects to delete for ${statusId}`);
-                    continue;
-                }
-                
-                console.log(`[${MODULE_ID}]   Disabling ${statusId} on ${targetToken.name} (deleting ${effectIds.length} effect(s))`);
-                // Delete the effect(s) directly
-                await targetToken.actor.deleteEmbeddedDocuments("ActiveEffect", effectIds);
-            } catch (err) {
-                // Ignore "does not exist" errors - the effect may have already been deleted
-                if (err.message?.includes("does not exist")) {
-                    console.log(`[${MODULE_ID}]   ${targetToken.name}: effect already deleted`);
-                } else {
+                    
+                    console.log(`[${MODULE_ID}]   Disabling ${statusId} on ${targetToken.name} (found ${effectsToDelete.length} effect(s) to remove)`);
+                    
+                    // Delete each effect individually to handle errors gracefully
+                    for (const effectToDelete of effectsToDelete) {
+                        try {
+                            // Double-check the effect still exists before attempting deletion
+                            const stillExists = targetToken.actor.effects?.some(ef => ef.id === effectToDelete.id);
+                            if (!stillExists) {
+                                console.log(`[${MODULE_ID}]     Effect ${effectToDelete.id} already removed`);
+                                continue;
+                            }
+                            
+                            await targetToken.actor.deleteEmbeddedDocuments("ActiveEffect", [effectToDelete.id]);
+                            console.log(`[${MODULE_ID}]     ✓ Removed effect ${effectToDelete.id}`);
+                        } catch (deleteErr) {
+                            // Silently ignore "does not exist" errors - effect was already removed
+                            if (!deleteErr.message?.includes("does not exist")) {
+                                console.warn(`[${MODULE_ID}]     Failed to delete effect ${effectToDelete.id}:`, deleteErr.message);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    // Catch any other unexpected errors
                     console.warn(`[${MODULE_ID}] Failed to sync effect to ${targetToken.name}:`, err.message);
                 }
             }
+        } finally {
+            // Always clear the syncing flag
+            isSyncing = false;
         }
     } catch (err) {
         console.error(`[${MODULE_ID}] Error in deleteActiveEffect handler:`, err);
