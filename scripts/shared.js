@@ -1,6 +1,6 @@
 
 // MODULE IDENTIFIER for our Group-Based Initiative module.
-export const MODULE_ID = "squad-combat-initiative";
+export const MODULE_ID = "fvtt-group-initiative";
 
 /**
  * Helper logging function that prints debug messages if logging is enabled.

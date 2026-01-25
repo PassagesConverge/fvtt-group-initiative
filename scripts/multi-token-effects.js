@@ -7,7 +7,7 @@
 
 import { log } from "./shared.js";
 
-const MODULE_ID = "squad-combat-initiative";
+const MODULE_ID = "fvtt-group-initiative";
 let isSyncing = false; // Flag to prevent cascading hook calls
 
 /**
@@ -42,9 +42,13 @@ async function onEffectCreate(effect, options, userId) {
         
         // Get the actor and token
         const actor = effect.parent;
-        if (!actor?.isToken) return;
+        if (!actor) return;
         
-        const token = actor.token?.object;
+        // For linked actors, find which controlled token has this actor
+        // For unlinked/synthetic actors, use actor.token.object
+        const token = actor.isToken 
+            ? actor.token?.object 
+            : canvas.tokens.controlled.find(t => t.actor?.id === actor.id);
         if (!token) return;
         
         // Get the status ID from the effect
@@ -53,16 +57,17 @@ async function onEffectCreate(effect, options, userId) {
             return;
         }
         
-        // Get all selected tokens (excluding this one)
+        // Get all selected tokens (excluding the source token)
         const selectedTokens = canvas.tokens.controlled?.filter(t => t.id !== token.id) ?? [];
         if (selectedTokens.length === 0) {
+            console.log(`[${MODULE_ID}] No other tokens selected to sync to`);
             return;
         }
         
-        console.log(`[${MODULE_ID}] Effect created: "${statusId}" on ${token.name}`);
-        console.log(`[${MODULE_ID}] Syncing status "${statusId}" ON to ${selectedTokens.length} other selected token(s)`);
+            return;
+        }
         
-        // Set syncing flag to prevent cascade
+        console.log(`[${MODULE_ID}] Syncing status "${statusId}" ON to ${selectedTokens.length} other token(s)`);
         isSyncing = true;
         
         try {
@@ -116,9 +121,13 @@ async function onEffectDelete(effect, options, userId) {
         
         // Get the actor and token
         const actor = effect.parent;
-        if (!actor?.isToken) return;
+        if (!actor) return;
         
-        const token = actor.token?.object;
+        // For linked actors, find which controlled token has this actor
+        // For unlinked/synthetic actors, use actor.token.object
+        const token = actor.isToken 
+            ? actor.token?.object 
+            : canvas.tokens.controlled.find(t => t.actor?.id === actor.id);
         if (!token) return;
         
         // Get the status ID from the effect
@@ -127,14 +136,13 @@ async function onEffectDelete(effect, options, userId) {
             return;
         }
         
-        // Get all selected tokens (excluding this one)
+        // Get all selected tokens (excluding the source token)
         const selectedTokens = canvas.tokens.controlled?.filter(t => t.id !== token.id) ?? [];
         if (selectedTokens.length === 0) {
             return;
         }
         
-        console.log(`[${MODULE_ID}] Effect deleted: "${statusId}" from ${token.name}`);
-        console.log(`[${MODULE_ID}] Syncing status "${statusId}" OFF to ${selectedTokens.length} other selected token(s)`);
+        console.log(`[${MODULE_ID}] Syncing status "${statusId}" OFF from ${selectedTokens.length} other token(s)`);
         
         // Set syncing flag to prevent cascade
         isSyncing = true;
