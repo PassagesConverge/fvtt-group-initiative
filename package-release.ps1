@@ -71,14 +71,13 @@ $excludePatterns = @(
 Write-Info ""
 Write-Info "Preparing files for packaging..."
 
-# Create temporary directory with module folder structure
+# Create temporary directory (files at root, not in subdirectory)
 $tempDir = Join-Path $env:TEMP "fvtt-module-temp"
-$moduleDir = Join-Path $tempDir $moduleName
 
 if (Test-Path $tempDir) {
     Remove-Item $tempDir -Recurse -Force
 }
-New-Item -ItemType Directory -Path $moduleDir -Force | Out-Null
+New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
 # Copy files to temp directory
 Get-ChildItem -Path "." -Recurse | ForEach-Object {
@@ -94,7 +93,7 @@ Get-ChildItem -Path "." -Recurse | ForEach-Object {
     }
     
     if (-not $shouldExclude) {
-        $destPath = Join-Path $moduleDir $relativePath
+        $destPath = Join-Path $tempDir $relativePath
         
         if ($_.PSIsContainer) {
             if (-not (Test-Path $destPath)) {
