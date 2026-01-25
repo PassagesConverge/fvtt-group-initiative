@@ -60,14 +60,12 @@ async function onEffectCreate(effect, options, userId) {
         // Get all selected tokens (excluding the source token)
         const selectedTokens = canvas.tokens.controlled?.filter(t => t.id !== token.id) ?? [];
         if (selectedTokens.length === 0) {
-            console.log(`[${MODULE_ID}] No other tokens selected to sync to`);
-            return;
-        }
-        
             return;
         }
         
         console.log(`[${MODULE_ID}] Syncing status "${statusId}" ON to ${selectedTokens.length} other token(s)`);
+        
+        // Set syncing flag to prevent cascade
         isSyncing = true;
         
         try {
