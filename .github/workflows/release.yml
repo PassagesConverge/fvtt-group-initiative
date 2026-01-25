@@ -1,0 +1,112 @@
+name: Release Module
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'  # Trigger on version tags like 1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    - name: Extract Version from Tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Verify module.json Version Matches Tag
+      run: |
+        MODULE_VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' module.json | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        TAG_VERSION="${{ steps.get_version.outputs.VERSION }}"
+        if [ "$MODULE_VERSION" != "$TAG_VERSION" ]; then
+          echo "Error: Version in module.json ($MODULE_VERSION) does not match tag ($TAG_VERSION)"
+          exit 1
+        fi
+        echo "Version verified: $MODULE_VERSION"
+    
+    - name: Get Module ID
+      id: get_id
+      run: |
+        MODULE_ID=$(grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' module.json | sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        echo "MODULE_ID=$MODULE_ID" >> $GITHUB_OUTPUT
+    
+    - name: Create Release Package
+      run: |
+        mkdir -p release
+        zip -r "release/${{ steps.get_id.outputs.MODULE_ID }}.zip" \
+          module.json \
+          README.md \
+          LICENSE \
+          scripts/ \
+          styles/ \
+          -x "*.git*" "release/*"
+        cp module.json release/
+    
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        # Get the previous tag
+        PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        
+        if [ -z "$PREVIOUS_TAG" ]; then
+          # First release, get all commits
+          COMMITS=$(git log --pretty=format:"- %s" --no-merges)
+        else
+          # Get commits since previous tag
+          COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+        fi
+        
+        # Create release notes
+        cat << EOF > release_notes.md
+        ## Release ${{ github.ref_name }}
+        
+        **Installation:**
+        Use this manifest URL in Foundry VTT:
+        \`\`\`
+        https://github.com/${{ github.repository }}/releases/latest/download/module.json
+        \`\`\`
+        
+        **Changes:**
+        ${COMMITS}
+        EOF
+        
+        # Save for next step
+        echo "NOTES_FILE=release_notes.md" >> $GITHUB_OUTPUT
+    
+    - name: Create GitHub Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        body_path: release_notes.md
+    
+    - name: Upload module.json
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/module.json
+        asset_name: module.json
+        asset_content_type: application/json
+    
+    - name: Upload Module ZIP
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release/${{ steps.get_id.outputs.MODULE_ID }}.zip
+        asset_name: ${{ steps.get_id.outputs.MODULE_ID }}.zip
+        asset_content_type: application/zip
