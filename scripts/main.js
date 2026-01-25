@@ -5,7 +5,6 @@ import { groupHeaderRendering } from "./group-header-rendering.js";
 import { GroupManager, GroupContextMenuManager } from "./class-objects.js";
 import { overrideRollMethods } from "./rolling-overrides.js";
 import { initCarouselIntegration } from "./carousel-integration.js";
-import { initMultiTokenEffects } from "./multi-token-effects.js";
 
 // Bind hooks in main.js — logic is exported from hooks.js
 Hooks.once("init", () => {
@@ -41,14 +40,6 @@ Hooks.once("ready", () => {
         initCarouselIntegration();
     } catch (err) {
         console.error(`[${MODULE_ID}] Error initializing Carousel integration:`, err);
-    }
-});
-
-Hooks.once("ready", () => {
-    try {
-        initMultiTokenEffects();
-    } catch (err) {
-        console.error(`[${MODULE_ID}] Error initializing multi-token effects:`, err);
     }
 });
 

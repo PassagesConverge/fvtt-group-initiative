@@ -34,8 +34,7 @@
     "scripts/rolling-overrides.js",
     "scripts/settings.js",
     "scripts/shared.js",
-    "scripts/carousel-integration.js",
-    "scripts/multi-token-effects.js"
+    "scripts/carousel-integration.js"
   ],
   "styles": [
     "styles/styles.css"
