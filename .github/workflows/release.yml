@@ -33,7 +33,7 @@ jobs:
     - name: Get Module ID
       id: get_id
       run: |
-        MODULE_ID=$(grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' module.json | sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+        MODULE_ID=$(grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' module.json | head -n 1 | sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
         echo "MODULE_ID=$MODULE_ID" >> $GITHUB_OUTPUT
     
     - name: Create Release Package
