@@ -1,4 +1,4 @@
-# Squad Combat Initiative (Enhanced Fork)
+# Lane's Group Initiative
 
 A Foundry VTT module for enhanced group-based initiative management in the D&D 5e system.
 
@@ -43,7 +43,7 @@ This module lets you group actors together under clean visual headers with minim
 
 ## 🧪 Compatibility
 
-- **Foundry VTT**: v12 and v13
+- **Foundry VTT**: v12, v13, and v14
 - **Game System**: Built for D&D 5e
 - **Recommended Modules**: 
   - [libWrapper](https://foundryvtt.com/packages/lib-wrapper) - For maximum compatibility with other modules
@@ -81,10 +81,10 @@ If you encounter issues:
 
 **Original Module**: [Squad Combat Initiative](https://github.com/Somedude5/Squad-Combat-Initiative) by [Somedude5](https://github.com/Somedude5)
 
-**Fork Enhancements**: Christine (compatibility improvements and additional features)
+**Fork Enhancements**: imalane (compatibility improvements and additional features)
 
 ## 📄 License
 
-MIT © 2025 Somedude5 (original), Christine (fork enhancements)
+MIT © 2025 Somedude5 (original), imalane (fork enhancements)
 
 If you fork or reuse this code, please retain credit to both the original author and this fork in your project or documentation.
