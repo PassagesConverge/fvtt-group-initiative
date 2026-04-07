@@ -12,6 +12,8 @@ import { MODULE_ID, log, GMPERMISSIONS } from "./shared.js";
 
 export const UNGROUPED = "ungrouped";
 
+// Note: promptGroupData imported lazily in editOption() to avoid circular dependency
+
 /* ------------------------------------------------------------------ */
 /*  GroupManager                                                      */
 /* ------------------------------------------------------------------ */
@@ -181,7 +183,7 @@ export class GroupContextMenuManager {
   static getContextOptions() {
     // if *any* non-GM calls this, give them ZERO options
     if (!game.user.isGM && game.user.role < CONST.USER_ROLES.ASSISTANT) return [];
-    return [renameOption(), setInitiativeOption(), deleteOption()];
+    return [editOption(), renameOption(), setInitiativeOption(), deleteOption()];
   }
 
   /* -- Prompt helper -- */
@@ -210,6 +212,42 @@ export class GroupContextMenuManager {
 /* ------------------------------------------------------------------ */
 /*  Individual context‑menu option factories                          */
 /* ------------------------------------------------------------------ */
+function editOption() {
+  return {
+    name: "Edit Group",
+    icon: "<i class=\"fas fa-pen-to-square\"></i>",
+    condition: li => game.user.isGM && !!li?.[0]?.closest(".combatant-group"),
+    callback: async li => {
+      const groupId = li?.[0]?.closest(".combatant-group")?.dataset?.groupKey;
+      const combat = game.combat;
+      const group = combat.getFlag(MODULE_ID, `groups.${groupId}`);
+      if (!group) return ui.notifications.warn("Could not find group data.");
+
+      // Lazy import to avoid circular dependency
+      const { promptGroupData } = await import("./combat-tracker.js");
+      
+      const data = await promptGroupData(group);
+      if (!data) return; // User cancelled
+
+      // Update all group properties
+      if (GMPERMISSIONS()) {
+        await combat.setFlag(MODULE_ID, `groups.${groupId}`, {
+          ...group,
+          name: data.name,
+          img: data.img || "icons/svg/combat.svg",
+          color: data.color || "#8b5cf6"
+        });
+      }
+      
+      ui.combat.render();
+      // Refresh carousel if it exists
+      if (ui.combatDock) {
+        ui.combatDock.setupCombatants();
+      }
+    }
+  };
+}
+
 function renameOption() {
   return {
     name: "Rename Group",

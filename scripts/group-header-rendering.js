@@ -304,6 +304,19 @@ export function renderGroupHeaders(html) {
                     ui.combat.render();
                 });
 
+                /* ――― Roll button ――― */
+                const rollBtn = groupContainer.querySelector(".group-roll");
+                rollBtn?.addEventListener("click", async event => {
+                    event.stopPropagation();
+                    const mode = event.altKey
+                        ? "advantage"
+                        : (event.ctrlKey || event.metaKey)
+                            ? "disadvantage"
+                            : "normal";
+
+                    await GroupManager.rollGroupAndApplyInitiative(combat, groupId, { mode });
+                });
+
                 groupContainer.querySelector(".group-reset")?.addEventListener("click", async event => {
                     event.stopPropagation();
                     const confirmed = await new Promise(res => {
@@ -372,7 +385,7 @@ export function renderGroupHeaders(html) {
             });
         }
 
-        if (game.user.role === CONST.USER_ROLES.GAMEMASTER) {
+        if (game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT) {
             attachContextMenu($(list));
         }
 
@@ -718,7 +731,7 @@ function setupRenderGroups(CT) {
             });
 
         }
-        if (game.user.role === CONST.USER_ROLES.GAMEMASTER) {
+        if (game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT) {
             attachContextMenu($(list));
         }
         } catch (err) {

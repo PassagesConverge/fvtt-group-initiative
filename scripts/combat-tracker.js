@@ -225,15 +225,23 @@ export function attachContextMenu($list) {
         return;
     }
 
-    // v13+ ContextMenu API uses namespaced class and requires jQuery: false
-    const ContextMenuClass = foundry.applications.ux.ContextMenu.implementation;
+    // Try multiple ContextMenu API locations for compatibility
+    const ContextMenuClass = 
+        ContextMenu ||  // v12 and earlier
+        foundry.applications.ux?.ContextMenu?.implementation ||  // v13+
+        window.ContextMenu;  // fallback
+
     if (!ContextMenuClass) {
         console.warn("[GroupSort] ContextMenu class not available");
         return;
     }
 
     const options = GroupContextMenuManager.getContextOptions();
-    new ContextMenuClass($list[0], SELECTORS.groupHead, options, { eventName: "contextmenu", jQuery: false });
+    console.log("[GroupSort] Attaching context menu with options:", options);
+    console.log("[GroupSort] Target selector:", SELECTORS.groupHead);
+    console.log("[GroupSort] Found elements:", $list[0].querySelectorAll(SELECTORS.groupHead).length);
+    
+    new ContextMenuClass($list[0], SELECTORS.groupHead, options, { eventName: "contextmenu" });
 }
 
 /* ------------------------------------------------------------------ */
@@ -311,26 +319,33 @@ async function openCreateGroupDialog() {
     }}
 
 /** Small dialog → returns {name,img,color} or null. */
-function promptGroupData() {
+export function promptGroupData(existingData = null) {
+    const isEdit = !!existingData;
+    const defaults = {
+        name: existingData?.name || "New Group",
+        img: existingData?.img || "",
+        color: existingData?.color || "#8b5cf6"
+    };
+    
     return new Promise(res => {
         // v13 uses Dialog from legacy compatibility - this is intentional
         const DialogClass = window.Dialog || foundry.applications.api.Dialog;
         new DialogClass({
-            title: "Create New Group",
+            title: isEdit ? "Edit Group" : "Create New Group",
             content: `
         <p>Name:</p>
-        <input id="g-name"  type="text" style="width:100%" value="New Group">
+        <input id="g-name"  type="text" style="width:100%" value="${defaults.name}">
         <p style="margin-top:.75em;">Icon:</p>
         <div class="form-group">
-          <input id="g-img" type="text" style="width:80%" placeholder="icons/svg/skull.svg">
+          <input id="g-img" type="text" style="width:80%" placeholder="icons/svg/skull.svg" value="${defaults.img}">
           <button type="button" id="g-img-picker" style="width:18%;margin-left:2%">📁</button>
         </div>
         <p style="margin-top:.75em;">Color:</p>
-        <input id="g-color" type="color" style="width:100%">
+        <input id="g-color" type="color" style="width:100%" value="${defaults.color}">
       `,
             buttons: {
                 ok: {
-                    label: "Create",
+                    label: isEdit ? "Save" : "Create",
                     callback: html => {
                         const $html = html instanceof jQuery ? html : $(html);
                         res({
