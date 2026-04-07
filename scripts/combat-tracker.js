@@ -333,15 +333,21 @@ export function promptGroupData(existingData = null) {
         new DialogClass({
             title: isEdit ? "Edit Group" : "Create New Group",
             content: `
-        <p>Name:</p>
-        <input id="g-name"  type="text" style="width:100%" value="${defaults.name}">
-        <p style="margin-top:.75em;">Icon:</p>
-        <div class="form-group">
-          <input id="g-img" type="text" style="width:80%" placeholder="icons/svg/skull.svg" value="${defaults.img}">
-          <button type="button" id="g-img-picker" style="width:18%;margin-left:2%">📁</button>
+        <div id="create-group-dialog">
+          <div class="form-group">
+            <label for="g-name">Name:</label>
+            <input id="g-name" type="text" value="${defaults.name}">
+          </div>
+          <div class="form-group">
+            <label for="g-img">Icon:</label>
+            <input id="g-img" type="text" placeholder="icons/svg/skull.svg" value="${defaults.img}">
+            <button type="button" id="g-img-picker">📁</button>
+          </div>
+          <div class="form-group">
+            <label for="g-color">Color:</label>
+            <input id="g-color" type="color" value="${defaults.color}">
+          </div>
         </div>
-        <p style="margin-top:.75em;">Color:</p>
-        <input id="g-color" type="color" style="width:100%" value="${defaults.color}">
       `,
             buttons: {
                 ok: {

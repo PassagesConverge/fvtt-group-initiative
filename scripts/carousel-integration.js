@@ -576,9 +576,17 @@ function injectCarouselProgressBars() {
                 <div class="carousel-progress-fill" style="width: ${progress.percentage}%" data-completed="${progress.completed}" data-total="${progress.total}"></div>
             `;
             
-            // Insert at the beginning of the combatant element
-            element.style.position = "relative";
-            element.insertBefore(progressBar, element.firstChild);
+            // Find the combatant-wrapper child and insert the progress bar there
+            const wrapper = element.querySelector(".combatant-wrapper");
+            if (wrapper) {
+                wrapper.style.position = "relative";
+                wrapper.style.overflow = "hidden";
+                wrapper.appendChild(progressBar);
+            } else {
+                // Fallback: insert into the element itself
+                element.style.position = "relative";
+                element.insertBefore(progressBar, element.firstChild);
+            }
         }
     } catch (err) {
         console.error(`[${MODULE_ID}] Error injecting carousel progress bars:`, err);
