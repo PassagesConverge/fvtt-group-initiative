@@ -40,12 +40,14 @@ li.combatant-group {
 /* 📐 Group Header Grid Layout */
 /* Group Header */
 .combatant-group > .group-header.grid-layout {
+  position: relative; /* For progress bar positioning */
   display: grid;
   grid-template-columns: auto 1fr 48px;
-  grid-template-rows: min-content 1fr min-content; /* give the middle row full height */
+  grid-template-rows: min-content 1fr 8px min-content; /* give the middle row full height */
   grid-template-areas:
     ".       buttons    buttons"
     "img     name       init"
+    "bar     bar        bar"
     ".       toggle     .";
   gap: 2px 6px;
   padding-bottom: 8px;
@@ -53,6 +55,37 @@ li.combatant-group {
   background-color: var(--color-bg-header);
   border-left: 4px solid var(--group-color);
   border-radius: var(--border-radius);
+}
+
+/* 📊 Group Progress Bar */
+.group-progress-bar {
+  grid-area: bar;
+  height: 8px;
+  background: linear-gradient(to bottom, 
+    rgba(0, 0, 0, 0.95) 0%, 
+    rgba(0, 0, 0, 0.85) 100%);
+  border-bottom: 1px solid rgba(0, 0, 0, 1);
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: inset 0 -2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.group-progress-bar .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, 
+    color-mix(in srgb, var(--group-color, #8b5cf6) 60%, black) 0%,
+    color-mix(in srgb, var(--group-color, #8b5cf6) 90%, white) 100%);
+  transition: width 0.4s ease-out;
+  box-shadow: 
+    0 0 10px color-mix(in srgb, var(--group-color, #8b5cf6) 60%, black),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  position: relative;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Hide progress bar when group is at 0% */
+.group-progress-bar .progress-fill[style*="width: 0%"] {
+  opacity: 0;
 }
 
 /* 🖼️ Group Icon */
@@ -155,7 +188,7 @@ li.combatant-group {
 }
 
 .group-header .collapse-toggle i {
-  transform: rotate(0deg); /* add default starting position */
+  transform: rotate(-180deg); /* add default starting position */
   transition: transform 250ms ease;
 }
 
@@ -168,7 +201,7 @@ li.combatant-group {
 }
 
 .combatant-group.collapsed .collapse-toggle i {
-  transform: rotate(-90deg);
+  transform: rotate(0deg);
 }
 
 /* 📦 Collapse Content */
@@ -367,3 +400,55 @@ li.combatant-group {
 /* body:not(.gm):not(.gamemaster) .group-controls {
   display: none !important;
 } */
+
+/* 🎠 Carousel Group Progress Bar */
+.carousel-group-progress-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: linear-gradient(to top, 
+    rgba(0, 0, 0, 0.95) 0%, 
+    rgba(0, 0, 0, 0.85) 100%);
+  border-top: 1px solid rgba(0, 0, 0, 1);
+  overflow: hidden;
+  z-index: 100;
+  pointer-events: none;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+  --group-color: var(--carousel-group-color, #8b5cf6);
+}
+
+.carousel-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, 
+    color-mix(in srgb, var(--group-color, #8b5cf6) 60%, black) 0%,
+    color-mix(in srgb, var(--group-color, #8b5cf6) 90%, white) 100%);
+  transition: width 0.4s ease-out;
+  box-shadow: 
+    0 0 10px color-mix(in srgb, var(--group-color, #8b5cf6) 60%, black),
+    inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  position: relative;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.3);
+  }
+}
+
+/* Hide progress bar when group is at 0% */
+.carousel-progress-fill[style*="width: 0%"] {
+  opacity: 0;
+}
+
+/* Ensure carousel combatant elements have relative positioning */
+.combat-dock [data-combatant-id^="group-"],
+.combat-carousel [data-combatant-id^="group-"],
+#combat-carousel [data-combatant-id^="group-"] {
+  position: relative !important;
+}

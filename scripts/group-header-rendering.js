@@ -53,6 +53,69 @@ export async function groupHeaderRendering() {
 }
 
 /**
+ * Calculate progress for a group based on turn order
+ * Returns { completed: number, total: number, percentage: number }
+ */
+function calculateGroupProgress(combat, groupId, groupMembers) {
+    if (!combat || !groupMembers || groupMembers.length === 0) {
+        return { completed: 0, total: 0, percentage: 0 };
+    }
+
+    const currentTurn = combat.turn ?? 0;
+    const currentRound = combat.round ?? 1;
+    
+    // Get all members of the group
+    const total = groupMembers.length;
+    
+    // Count how many have had their turn this round
+    let completed = 0;
+    for (const member of groupMembers) {
+        const memberIndex = combat.turns.findIndex(t => t.id === member.id);
+        if (memberIndex === -1) continue;
+        
+        // If we're past this combatant's turn in the current round, they've gone
+        if (memberIndex < currentTurn) {
+            completed++;
+        }
+    }
+    
+    const percentage = total > 0 ? (completed / total) * 100 : 0;
+    return { completed, total, percentage };
+}
+
+/**
+ * Update progress bars for all groups without full re-render
+ * Call this when combat turn changes for better performance
+ */
+export function updateGroupProgressBars() {
+    const combat = game.combat;
+    if (!combat) return;
+
+    try {
+        const groups = GroupManager.getGroups(combat.turns, combat);
+        const trackerElement = document.querySelector(".combat-tracker, #combat-tracker");
+        if (!trackerElement) return;
+
+        for (const [groupId, groupData] of groups.entries()) {
+            if (groupId === "ungrouped") continue;
+
+            const groupElement = trackerElement.querySelector(`li.combatant-group[data-group-key="${groupId}"]`);
+            if (!groupElement) continue;
+
+            const progressFill = groupElement.querySelector(".progress-fill");
+            if (!progressFill) continue;
+
+            const progress = calculateGroupProgress(combat, groupId, groupData.members || []);
+            progressFill.style.width = `${progress.percentage}%`;
+            progressFill.dataset.completed = progress.completed;
+            progressFill.dataset.total = progress.total;
+        }
+    } catch (err) {
+        console.error(`[${MODULE_ID}] Error updating group progress bars:`, err);
+    }
+}
+
+/**
  * Standalone function to render group headers in the combat tracker
  * Call this from renderCombatTracker hook
  */
@@ -97,7 +160,7 @@ export function renderGroupHeaders(html) {
             const canManage = game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT;
             const combatants = groupData.members;
             const img = groupCfg.img || "icons/svg/combat.svg";
-            const color = groupCfg.color || "#000000";
+            const color = groupCfg.color || "#8b5cf6";
             const expanded = expandedGroups.has(groupId);
 
             log(`[${MODULE_ID}] Rendering group: ${groupId}`);
@@ -119,6 +182,9 @@ export function renderGroupHeaders(html) {
                 `DND5E.COMBATANT.Counted.${getPluralRules().select(combatants.length)}`,
                 { number: formatNumber(combatants.length) }
             );
+
+            // Calculate progress for this group
+            const progress = calculateGroupProgress(combat, groupId, combatants);
 
             /* Build DOM <li> for the header. */
             const groupContainer = document.createElement("li");
@@ -148,6 +214,9 @@ export function renderGroupHeaders(html) {
               </div>
               <div class="header-init group-initiative-value">
                 ${Number.isFinite(avgInit) ? formatNumber(avgInit) : ""}
+              </div>
+              <div class="group-progress-bar">
+                <div class="progress-fill" style="width: ${progress.percentage}%" data-completed="${progress.completed}" data-total="${progress.total}"></div>
               </div>
                 <div class="collapse-toggle header-toggle">
                 <i class="fa-solid fa-chevron-down"></i>
@@ -379,7 +448,7 @@ function setupRenderGroups(CT) {
             const canManage = game.user.isGM || game.user.role >= CONST.USER_ROLES.ASSISTANT;
             const combatants = groupData.members;
             const img = groupCfg.img || "icons/svg/combat.svg";
-            const color = groupCfg.color || "#000000";
+            const color = groupCfg.color || "#8b5cf6";
             const expanded = expandedGroups.has(groupId);
 
             // Prefer stored average initiative; fallback to recomputed rounded mean.
@@ -416,8 +485,14 @@ function setupRenderGroups(CT) {
                 { number: formatNumber(combatants.length) }
             );
 
+            // Calculate progress for this group
+            const progress = calculateGroupProgress(combat, groupId, combatants);
+
             groupContainer.innerHTML = /*html*/`
             <div class="group-header grid-layout">
+              <div class="group-progress-bar">
+                <div class="progress-fill" style="width: ${progress.percentage}%" data-completed="${progress.completed}" data-total="${progress.total}"></div>
+              </div>
               <!-- [1] Icon -->
               <div class="header-img">
                 <img class="token-image" src="${img}" title="Group icon for ${initiativegroupName}">

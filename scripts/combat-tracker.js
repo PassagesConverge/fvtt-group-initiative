@@ -11,7 +11,7 @@
 import { MODULE_ID, log, generateGroupId, expandStore, GMPERMISSIONS } from "./shared.js";
 import { GroupManager, GroupContextMenuManager } from "./class-objects.js";
 import { wrapped } from "./rolling-overrides.js";
-import { renderGroupHeaders } from "./group-header-rendering.js";
+import { renderGroupHeaders, updateGroupProgressBars } from "./group-header-rendering.js";
 
 const SELECTORS = {
     list: "ol.directory-list, .combat-tracker",
@@ -273,7 +273,7 @@ async function openCreateGroupDialog() {
             initiative: null,
             expanded: true,
             img: data.img || "icons/svg/combat.svg",
-            color: data.color || "#00ff00",
+            color: data.color || "#8b5cf6",
         });
         const expandedSet = expandStore.load(combat.id);
         expandedSet.add(groupId);
@@ -393,6 +393,11 @@ export async function onCreateCombatant(combatant) {
 
 /** Auto-collapse groups on turn change (per-client, respects pins + animation). */
 export async function onUpdateCombat(combat, update) {
+    // Update progress bars immediately when turn changes (without full re-render)
+    if ("turn" in update || "round" in update) {
+        updateGroupProgressBars();
+    }
+
     if (!("turn" in update) ||
         !game.settings.get(MODULE_ID, "autoCollapseGroups")) return;
 
@@ -449,6 +454,9 @@ export async function onUpdateCombat(combat, update) {
 
                 log(`[${MODULE_ID}] Group ${gid}: after classList =`, [...li.classList]);
             }
+
+            // Update progress bars after render
+            updateGroupProgressBars();
         });
     });
 }
