@@ -320,7 +320,7 @@ export function renderGroupHeaders(html) {
                 groupContainer.querySelector(".group-reset")?.addEventListener("click", async event => {
                     event.stopPropagation();
                     const confirmed = await new Promise(res => {
-                        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                        const DialogClass = window.Dialog || Dialog;
                         new DialogClass({
                             title: `Reset Initiative for \"${initiativegroupName}\"`,
                             content: "<p>Clear initiative for all members of this group?</p>",
@@ -347,7 +347,7 @@ export function renderGroupHeaders(html) {
                 groupContainer.querySelector(".group-delete")?.addEventListener("click", async event => {
                     event.stopPropagation();
                     const confirmed = await new Promise(res => {
-                        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                        const DialogClass = window.Dialog || Dialog;
                         new DialogClass({
                             title: `Delete Group \"${initiativegroupName}\"`,
                             content: "<p>Delete this group and unassign its members?</p>",
@@ -656,7 +656,7 @@ function setupRenderGroups(CT) {
                     ?.addEventListener("click", async event => {
                         event.stopPropagation();
                         const confirmed = await new Promise(res => {
-                            const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                            const DialogClass = window.Dialog || Dialog;
                             new DialogClass({
                                 title: `Reset Initiative for \"${initiativegroupName}\"`,
                                 content: "<p>Clear initiative for all members of this group?</p>",
@@ -689,7 +689,7 @@ function setupRenderGroups(CT) {
                     ?.addEventListener("click", async event => {
                         event.stopPropagation();
                         const confirmed = await new Promise(res => {
-                            const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+                            const DialogClass = window.Dialog || Dialog;
                             new DialogClass({
                                 title: `Delete Group \"${initiativegroupName}\"`,
                                 content: "<p>Delete this group and unassign its members?</p>",

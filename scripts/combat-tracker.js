@@ -328,8 +328,8 @@ export function promptGroupData(existingData = null) {
     };
     
     return new Promise(res => {
-        // v13 uses Dialog from legacy compatibility - this is intentional
-        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+        // Use legacy Dialog API for v13-v14 compatibility (DialogV2 has different structure)
+        const DialogClass = window.Dialog || Dialog;
         new DialogClass({
             title: isEdit ? "Edit Group" : "Create New Group",
             content: `

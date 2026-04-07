@@ -189,7 +189,7 @@ export class GroupContextMenuManager {
   /* -- Prompt helper -- */
   static async prompt(title, msg, defVal = "") {
     return new Promise(res => {
-      const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+      const DialogClass = window.Dialog || Dialog;
       new DialogClass({
         title,
         content: `<p>${msg}</p><input type="text" value="${defVal}" style="width:100%">`,
@@ -311,7 +311,7 @@ function deleteOption() {
       if (!groupId) return ui.notifications.warn("Could not determine group.");
 
       const ok = await new Promise(res => {
-        const DialogClass = window.Dialog || foundry.applications.api.Dialog;
+        const DialogClass = window.Dialog || Dialog;
         new DialogClass({
           title: `Delete Group \"${groupId}\"`,
           content: `<p>Delete this group and unassign its members?</p>`,

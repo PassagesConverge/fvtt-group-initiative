@@ -241,14 +241,6 @@ li.combatant-group {
   margin-top: 2px;
 }
 
-/* 👁️ Hide Buttons on Collapse */
-/* Only hide some controls when collapsed */
-/* .combatant-group.collapsed .group-controls .group-roll,
-.combatant-group.collapsed .group-controls .group-reset,
-.combatant-group.collapsed .group-controls .group-pin {
-  display: none;
-} */
-
 /* 🎛️ Control Button Row */
 /* Control Button Row */
 .token-initiative.group-controls {
@@ -415,9 +407,6 @@ li.combatant-group {
 .combatant-group[data-group-color] .group-children li.combatant {
   background-color: color-mix(in srgb, var(--group-color) 10%, transparent);
   border-left: 4px solid var(--group-color);
-}
-
-.combatant-group[data-group-color] .group-children li.combatant {
   border-bottom: 1px solid color-mix(in srgb, var(--group-color) 30%, #000);
 }
 
@@ -428,10 +417,6 @@ li.combatant-group {
     var(--color-bg-option)
   );
 }
-
-/* body:not(.gm):not(.gamemaster) .group-controls {
-  display: none !important;
-} */
 
 /* 🎠 Carousel Group Progress Bar */
 .carousel-group-progress-bar {
